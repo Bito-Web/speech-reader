@@ -2,7 +2,7 @@ name: Publish Package to NPM
 
 on:
   release:
-    types: [published] # Se activa automáticamente cuando creas una "Release" en GitHub
+    types: [published]
 
 jobs:
   build-and-publish:
@@ -25,6 +25,6 @@ jobs:
         run: npm run build
 
       - name: Publish to NPM
-        run: npm publish
+        run: npm publish --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}s
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
