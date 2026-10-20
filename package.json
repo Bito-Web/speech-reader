@@ -1,5 +1,5 @@
 {
-  "name": "speech-reader-engine",
+  "name": "@bito-web/speech-reader-engine",
   "version": "1.0.0",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -14,6 +14,7 @@
     "prepublishOnly": "npm run build"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   }
 }
