@@ -1,5 +1,5 @@
 {
-  "name": "@jorge-torrelles/speech-reader-engine",
+  "name": "@bito-web/speech-reader-engine",
   "version": "1.0.0",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -18,6 +18,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jorge-torrelles/speech-reader.git"
+    "url": "git+https://github.com/bito-web/speech-reader.git"
   }
 }
