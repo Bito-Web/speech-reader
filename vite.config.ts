@@ -10,7 +10,6 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // Nos aseguramos de no empaquetar dependencias externas si las hubiera
       external: [],
     },
   },
