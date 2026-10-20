@@ -1,6 +1,7 @@
 name: Node.js Package
 
 on:
+  workflow_dispatch: # Permite ejecutar el workflow manualmente desde la pestaña Actions
   release:
     types: [published]
 
