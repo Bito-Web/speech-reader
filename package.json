@@ -1,5 +1,5 @@
 {
-  "name": "@bito-web/speech-reader-engine",
+  "name": "@jorge-torrelles/speech-reader-engine",
   "version": "1.0.0",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -14,7 +14,10 @@
     "prepublishOnly": "npm run build"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "public"
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jorge-torrelles/speech-reader.git"
   }
 }
