@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: 20
           registry-url: 'https://npm.pkg.github.com'
-          scope: '@jorge-torrelles'
+          scope: '@bito-web'
       - run: npm ci
       - run: npm publish
         env:
