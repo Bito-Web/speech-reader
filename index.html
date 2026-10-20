@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+    <title>Use Example - Multi Language</title>
+  </head>
+  <body>
+    <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+      <button id="play-btn">Iniciar Lectura</button>
+      
+      <label for="lang-select">Idioma:</label>
+      <select id="lang-select">
+        <option value="es-ES">Español (es-ES)</option>
+        <option value="en-US">English (en-US)</option>
+        <option value="zh-CN">Chinese (zh-CN)</option>
+      </select>
+    </div>
+
+    <div id="app" style="margin-top: 20px; font-size: 1.2rem; line-height: 1.6;"></div>
+
+    <script type="module" src="/src/use-example.ts"></script>
+  </body>
+</html>
