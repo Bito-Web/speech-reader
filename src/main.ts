@@ -5,6 +5,7 @@ export interface VoiceSettings {
   text: string;
   lang: string;
   voiceType?: 'male' | 'female' | 'default';
+  voiceURI?: string;     // Identificador exacto de voz (voiceURI o, en su defecto, name)
   rate: number;          // Velocidad de reproducción de audio (0.1 a 10)
   pitch: number;         // Tono de voz (0 a 2)
   volume: number;        // Volumen de audio (0 a 1)
@@ -51,6 +52,7 @@ export interface PhraseChunk {
   punctuation: string;
   tokens: WordToken[];
   totalChars: number;
+  charIndex: number; // Posición absoluta de la frase dentro del texto completo
 }
 
 /**
@@ -63,6 +65,16 @@ export type BoundaryCallback = (payload: {
   charLength: number;
   phraseIndex: number;
 }) => void;
+
+/**
+ * Callback del ciclo de vida de la lectura (inicio y fin de la locución).
+ */
+export type ReaderEventCallback = () => void;
+
+/**
+ * Callback de error de la síntesis de voz.
+ */
+export type ReaderErrorCallback = (error: string) => void;
 
 /**
  * Clase Reader con soporte para ajuste de velocidad independiente del marcador visual (markerVelocity).
@@ -99,6 +111,13 @@ export class Reader {
 
   private isDebug: boolean = false;
   private onBoundaryCallback: BoundaryCallback | null = null;
+  private onStartCallback: ReaderEventCallback | null = null;
+  private onEndCallback: ReaderEventCallback | null = null;
+  private onErrorCallback: ReaderErrorCallback | null = null;
+
+  private startNotified: boolean = false;
+  private isRealBoundaryMode: boolean = false;
+  private lastEmittedTokenIndex: number = -1;
 
   constructor(options?: ReaderOptions) {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -158,6 +177,18 @@ export class Reader {
 
   public onBoundary(callback: BoundaryCallback) {
     this.onBoundaryCallback = callback;
+  }
+
+  public onStart(callback: ReaderEventCallback) {
+    this.onStartCallback = callback;
+  }
+
+  public onEnd(callback: ReaderEventCallback) {
+    this.onEndCallback = callback;
+  }
+
+  public onError(callback: ReaderErrorCallback) {
+    this.onErrorCallback = callback;
   }
 
   public getAvailableVoices(): SpeechSynthesisVoice[] {
@@ -260,6 +291,7 @@ export class Reader {
         punctuation,
         tokens: currentPhraseTokens,
         totalChars: totalPhraseChars,
+        charIndex: match.index,
       });
 
       phraseCount++;
@@ -271,6 +303,14 @@ export class Reader {
   private getSelectedVoice(): SpeechSynthesisVoice | null {
     const voices = this.getAvailableVoices();
     if (!voices.length) return null;
+
+    if (this.voiceSettings.voiceURI) {
+      const requested = this.voiceSettings.voiceURI;
+      const exact =
+        voices.find((v) => v.voiceURI === requested) ??
+        voices.find((v) => v.name === requested);
+      if (exact) return exact;
+    }
 
     const langVoices = voices.filter((v) =>
       v.lang.toLowerCase().startsWith(this.voiceSettings.lang.slice(0, 2).toLowerCase())
@@ -328,22 +368,30 @@ export class Reader {
     this.isSpeaking = true;
     this.isPaused = false;
     this.currentPhraseIndex = 0;
+    this.startNotified = false;
+    this.isRealBoundaryMode = false;
+    this.lastEmittedTokenIndex = -1;
 
     this.playPhraseSequence();
   }
 
   private playPhraseSequence = (): void => {
-    if (!this.isSpeaking || this.currentPhraseIndex >= this.phraseChunks.length) {
+    if (!this.isSpeaking || this.isPaused) return;
+
+    if (this.currentPhraseIndex >= this.phraseChunks.length) {
       this.isSpeaking = false;
+      this.clearTimer();
       this.clearHighlighting();
       this.log('Lectura de frases finalizada.');
+      if (this.onEndCallback) this.onEndCallback();
       return;
     }
 
-    if (this.isPaused) return;
-
     const currentChunk = this.phraseChunks[this.currentPhraseIndex];
     this.log(`Iniciando frase ${currentChunk.index}: "${currentChunk.phraseText}"`);
+
+    this.isRealBoundaryMode = false;
+    this.lastEmittedTokenIndex = -1;
 
     const utterance = new SpeechSynthesisUtterance(currentChunk.phraseText);
     utterance.lang = this.voiceSettings.lang;
@@ -353,6 +401,17 @@ export class Reader {
 
     const voice = this.getSelectedVoice();
     if (voice) utterance.voice = voice;
+
+    utterance.onstart = () => {
+      if (this.startNotified) return;
+      this.startNotified = true;
+      if (this.onStartCallback) this.onStartCallback();
+    };
+
+    // Si el navegador entrega fronteras reales, ellas mandan sobre la estimación.
+    utterance.onboundary = (event) => {
+      this.handleBoundaryEvent(currentChunk, event);
+    };
 
     const phraseVelocity = this.voiceSettings.phraseVelocity || 400;
     const totalPhraseDuration = (currentChunk.tokens.length * phraseVelocity) / this.voiceSettings.rate;
@@ -376,28 +435,27 @@ export class Reader {
     };
 
     utterance.onerror = (err) => {
-      console.error('[Reader Engine] Error en la narración de frase:', err);
-      this.stop();
+      this.clearTimer();
+      const code = err.error || 'unknown';
+      // 'interrupted' y 'canceled' son normales al detener o cambiar de frase.
+      if (!this.isSpeaking || code === 'interrupted' || code === 'canceled') return;
+
+      this.isSpeaking = false;
+      this.log('Error en la narración de frase:', err);
+      if (this.onErrorCallback) this.onErrorCallback(code);
     };
 
     this.synth.speak(utterance);
   };
 
   private animatePhraseTokens(chunk: PhraseChunk, tokenIndex: number, totalDuration: number): void {
-    if (!this.isSpeaking || tokenIndex >= chunk.tokens.length || this.isPaused) return;
+    if (!this.isSpeaking || this.isPaused || this.isRealBoundaryMode) return;
+    if (tokenIndex >= chunk.tokens.length) return;
 
     const currentToken = chunk.tokens[tokenIndex];
-    this.highlightWordIndex(currentToken.index);
+    if (!currentToken) return;
 
-    if (this.onBoundaryCallback) {
-      this.onBoundaryCallback({
-        wordIndex: currentToken.index,
-        word: currentToken.word,
-        charIndex: currentToken.charIndex,
-        charLength: currentToken.charLength,
-        phraseIndex: this.currentPhraseIndex,
-      });
-    }
+    this.emitToken(chunk, tokenIndex);
 
     const charWeight = chunk.totalChars > 0 ? (currentToken.charLength / chunk.totalChars) : (1 / chunk.tokens.length);
     const velocityMultiplier = this.markerSettings.markerVelocity ?? 1.0;
@@ -406,6 +464,60 @@ export class Reader {
     this.wordTimer = window.setTimeout(() => {
       this.animatePhraseTokens(chunk, tokenIndex + 1, totalDuration);
     }, wordDuration);
+  }
+
+  private emitToken(chunk: PhraseChunk, tokenIndex: number): void {
+    const token = chunk.tokens[tokenIndex];
+    if (!token) return;
+
+    this.lastEmittedTokenIndex = tokenIndex;
+    this.highlightWordIndex(token.index);
+
+    if (this.onBoundaryCallback) {
+      this.onBoundaryCallback({
+        wordIndex: token.index,
+        word: token.word,
+        charIndex: token.charIndex,
+        charLength: token.charLength,
+        phraseIndex: chunk.index,
+      });
+    }
+  }
+
+  /**
+   * Frontera real entregada por el motor de síntesis. El charIndex del evento es
+   * relativo a la frase (utterance), por eso lo desplazamos con chunk.charIndex.
+   */
+  private handleBoundaryEvent(chunk: PhraseChunk, event: SpeechSynthesisEvent): void {
+    const absoluteIndex = chunk.charIndex + event.charIndex;
+    let tokenIndex = -1;
+
+    for (let i = 0; i < chunk.tokens.length; i++) {
+      if (chunk.tokens[i].charIndex <= absoluteIndex) tokenIndex = i;
+      else break;
+    }
+
+    if (tokenIndex === -1) return;
+
+    this.isRealBoundaryMode = true;
+    this.clearTimer();
+    this.emitToken(chunk, tokenIndex);
+
+    // Algunos motores emiten sólo la primera frontera: si dejan de llegar
+    // eventos, retomamos la estimación por tiempo desde la palabra siguiente.
+    const phraseVelocity = this.voiceSettings.phraseVelocity || 400;
+    const remainingTokens = Math.max(0, chunk.tokens.length - tokenIndex - 1);
+    const remainingDuration = (remainingTokens * phraseVelocity) / this.voiceSettings.rate;
+    const fallbackDelay = Math.max(600, phraseVelocity * 2) / this.voiceSettings.rate;
+
+    this.wordTimer = window.setTimeout(() => {
+      this.wordTimer = null;
+      if (!this.isSpeaking || this.isPaused) return;
+      if (this.currentPhraseIndex !== chunk.index) return;
+
+      this.isRealBoundaryMode = false;
+      this.animatePhraseTokens(chunk, tokenIndex + 1, remainingDuration);
+    }, fallbackDelay);
   }
 
   private clearTimer(): void {
@@ -434,18 +546,31 @@ export class Reader {
   }
 
   public resume(): void {
-    if (this.isSpeaking && this.isPaused) {
-      this.isPaused = false;
-      this.synth.resume();
-      this.log('Reanudando lectura.');
-      this.playPhraseSequence();
-    }
+    if (!this.isSpeaking || !this.isPaused) return;
+
+    this.isPaused = false;
+    this.synth.resume();
+    this.log('Reanudando lectura.');
+
+    const chunk = this.phraseChunks[this.currentPhraseIndex];
+    if (!chunk) return;
+
+    // Retomamos el marcador desde la última palabra emitida. No volvemos a
+    // encolar la frase: la locución pausada sigue viva en la cola del motor.
+    this.isRealBoundaryMode = false;
+    const nextToken = Math.max(0, this.lastEmittedTokenIndex + 1);
+    const remainingTokens = Math.max(0, chunk.tokens.length - nextToken);
+    const remainingDuration = (remainingTokens * (this.voiceSettings.phraseVelocity || 400)) / this.voiceSettings.rate;
+
+    this.animatePhraseTokens(chunk, nextToken, remainingDuration);
   }
 
   public stop(): void {
     this.isSpeaking = false;
     this.isPaused = false;
     this.currentPhraseIndex = 0;
+    this.isRealBoundaryMode = false;
+    this.lastEmittedTokenIndex = -1;
     this.clearTimer();
     this.synth.cancel();
     this.clearHighlighting();

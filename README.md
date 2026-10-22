@@ -13,6 +13,9 @@ Una librería moderna, ligera y extensible escrita en TypeScript que resuelve la
 * ⚡ **`markerVelocity`**: Multiplicador independiente para acelerar o decelerar la animación del resaltador en relación con la voz.
 * 🌐 **Soporte Multilingüe y Unicode CJK**: Tokenizador avanzado basado en la propiedad `\p{Script=Han}` para segmentar correctamente ideogramas de chino, japonés y coreano, así como lenguajes occidentales.
 * 🎛 **Control Total de Reproducción**: Métodos sencillos para `prepare()`, `speak()`, `pause()`, `resume()` y `stop()`.
+* 🔊 **Fronteras reales primero**: si el navegador emite eventos `boundary`, se usan para sincronizar el marcador; si no, se cae en la estimación por tiempo.
+* 🗣 **Selección exacta de voz**: `voiceURI` (o el nombre de la voz) permite fijar una voz concreta sin depender de la heurística idioma/género.
+* 🔔 **Eventos de ciclo de vida**: `onStart`, `onEnd` y `onError` para saber cuándo empieza, termina o falla la locución.
 
 ---
 
@@ -25,10 +28,12 @@ speech-reader/
 │   └── index.d.ts       # Declaraciones de tipos TypeScript
 ├── src/
 │   ├── main.ts          # Código fuente de la clase Reader e interfaces
+│   ├── index.ts         # Punto de entrada (re-export para emitir dist/index.d.ts)
 │   └── use-example.ts   # Ejemplo práctico de implementación
 ├── index.html           # Interfaz demo para desarrollo
 ├── package.json         # Configuración del paquete
 ├── tsconfig.json        # Configuración de compilación de TypeScript
+├── tsconfig.build.json  # Emisión de declaraciones (.d.ts)
 └── vite.config.ts       # Configuración del bundler Vite (Modo Librería)
 
 ```
@@ -81,7 +86,7 @@ Asegúrate de definir los puntos de entrada para los consumidores del paquete en
   ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "preview": "vite preview"
   },
   "devDependencies": {
@@ -101,7 +106,25 @@ npm run build
 
 ```
 
-Esto generará la carpeta `dist/` con el código optimizado e higienizado listo para importarse.
+Esto generará la carpeta `dist/` con el código optimizado e higienizado listo para importarse, junto con las declaraciones de tipos (`index.d.ts` y `main.d.ts`) que consume `package.json#types`.
+
+### 4. Publicación local (GitHub Packages)
+
+El token **no se guarda en el repositorio**: `.npmrc` lo lee de la variable de entorno `NODE_AUTH_TOKEN`.
+
+```bash
+export NODE_AUTH_TOKEN=ghp_...
+npm publish
+```
+
+En PowerShell:
+
+```powershell
+$env:NODE_AUTH_TOKEN = 'ghp_...'
+npm publish
+```
+
+En GitHub Actions no hay que configurar nada: el workflow usa `secrets.GITHUB_TOKEN`.
 
 ---
 
@@ -156,6 +179,27 @@ reader.speak();
 
 ```
 
+### Voz exacta y eventos de ciclo de vida
+
+```typescript
+const reader = new Reader();
+
+reader
+  .set()
+  .text('Hola, ¿cómo estás?')
+  .language('es-ES')
+  .target(container)
+  .voice({ voiceURI: 'Microsoft Sabina - Spanish (Spain)', rate: 1 });
+
+reader.onStart(() => console.log('Empieza la lectura'));
+reader.onEnd(() => console.log('Terminó la lectura'));
+reader.onError((error) => console.error('Falló la síntesis:', error));
+
+await reader.prepare();
+reader.speak();
+
+```
+
 ---
 
 ## Referencia de la API
@@ -175,6 +219,7 @@ reader.speak();
 | `text` | `string` | `''` | Texto a ser procesado y leído. |
 | `lang` | `string` | `'es-ES'` | Código BCP 47 del idioma (ej: `es-ES`, `en-US`, `zh-CN`). |
 | `voiceType` | `'male' | 'female' | 'default'` | `'default'` | Preferencia del tipo de voz. |
+| `voiceURI` | `string` | — | Identificador exacto de la voz (`voiceURI` del navegador o, en su defecto, su `name`). |
 | `rate` | `number` | `1` | Velocidad de la síntesis de voz (0.1 a 10). |
 | `pitch` | `number` | `1` | Tono de la voz (0 a 2). |
 | `volume` | `number` | `1` | Volumen de audio (0 a 1). |
@@ -194,6 +239,8 @@ reader.speak();
 
 ## Métodos de Control
 
+* `onStart(callback)`, `onEnd(callback)`, `onError(callback)`
+Registran callbacks de inicio, fin y error de la locución.
 * `prepare(targetElement?: HTMLElement): Promise<boolean>`
 Sincroniza las voces de la Web Speech API con el texto, segmenta el contenido en frases/palabras e inyecta la estructura HTML en el contenedor.
 * `speak(): Promise<void>`
