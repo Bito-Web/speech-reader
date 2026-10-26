@@ -9,8 +9,5 @@ export default defineConfig({
       fileName: (format) => `index.${format === 'es' ? 'js' : 'cjs'}`,
       formats: ['es', 'cjs'],
     },
-    rollupOptions: {
-      external: [],
-    },
   },
 });

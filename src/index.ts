@@ -1,7 +1,11 @@
 /**
  * Punto de entrada del paquete.
  *
- * Existe para que `tsc` emita `dist/index.d.ts`, que es lo que declara
- * `package.json#types` (el bundle de Vite ya se genera a partir de este archivo).
+ * El bundle de Vite y las declaraciones de `tsc` se generan a partir de este
+ * archivo. `segmentText` se expone como utilidad pública para que los
+ * consumidores puedan previsualizar la segmentación sin instanciar el Reader.
  */
-export * from './main';
+
+export { Reader } from './core/reader.js';
+export { PHRASE_DELIMITERS, segmentText } from './text/tokenizer.js';
+export type * from './types.js';

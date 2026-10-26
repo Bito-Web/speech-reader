@@ -1,16 +1,32 @@
 {
   "name": "@bito-web/speech-reader-engine",
   "version": "1.1.0",
+  "description": "Motor de lectura en voz alta con segmentación por frases, resaltado en tiempo real y soporte Unicode.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.js"
+    },
+    "./dist/*": "./dist/*",
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist"
   ],
+  "sideEffects": false,
   "scripts": {
     "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
     "build": "vite build && tsc -p tsconfig.build.json",
+    "test": "npm run build && node --test tests && node tests/reader-smoke.mjs",
+    "test:smoke": "node tests/reader-smoke.mjs",
     "prepublishOnly": "npm run build"
   },
   "publishConfig": {
@@ -19,5 +35,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bito-web/speech-reader.git"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4"
   }
 }
